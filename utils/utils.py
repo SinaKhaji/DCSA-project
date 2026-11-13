@@ -28,8 +28,11 @@ class CNN(nn.Module):
         x = self.classifier(x)
         return x
 
+def download_dataset(data_dir="../data"):
+    torchvision.datasets.MNIST(root=data_dir, train=True, download=True)
+    torchvision.datasets.MNIST(root=data_dir, train=False, download=True)
 
-def init_dataset(batch_size=128, data_dir="../data"):
+def get_dataloaders(batch_size=128, data_dir="../data"):
     MNIST_MEAN = (0.1307,)
     MNIST_STD = (0.3081,)
 
@@ -38,8 +41,8 @@ def init_dataset(batch_size=128, data_dir="../data"):
         torchvision.transforms.Normalize(MNIST_MEAN, MNIST_STD),
     ])
 
-    train_set = torchvision.datasets.MNIST(data_dir, train=True, download=True, transform=transform)
-    test_set = torchvision.datasets.MNIST(data_dir, train=False, download=True, transform=transform)
+    train_set = torchvision.datasets.MNIST(data_dir, train=True, transform=transform)
+    test_set = torchvision.datasets.MNIST(data_dir, train=False, transform=transform)
     train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=0)
     test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size, num_workers=0)
     print("Dataset loaded.")
@@ -56,7 +59,7 @@ def train_one_epoch(model, loader, optimizer):
         loss = F.cross_entropy(outputs, labels)
 
         optimizer.zero_grad()
-        loss.backward()
+        loss.backward()                            # In DDP the gradients from different processes gets aggregated
 
         optimizer.step()
 
@@ -97,8 +100,9 @@ def evaluate(model, loader):
     accuracy = correct / count
     return average_loss, accuracy
 
-def save_results(path, results):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w") as f:
-        json.dump(results, f, indent=2)
-    print(f"Saved results to {path}")
+def save(directory, filename, report):
+        os.makedirs(directory, exist_ok=True)
+        path = os.path.join(directory, f"{filename}.json")
+        with open(path, "w") as f:
+            json.dump(report, f, indent=2)
+        print(f"\nSaved report to {path}")
