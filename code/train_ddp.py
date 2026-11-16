@@ -43,6 +43,7 @@ def main(process_index, REPORT):
     report = REPORT[process_index]
 
     for epoch in range(1, EPOCHS + 1):
+        sampler.set_epoch(epoch) #use a new distributed shuffle each epoch
         epoch_start = time.time()
         train_loss, train_acc = train_one_epoch(model, train_loader, optimizer)
         epoch_time = time.time() - epoch_start
