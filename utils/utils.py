@@ -48,7 +48,7 @@ def get_dataloaders(batch_size=128, data_dir="../data"):
     print("Dataset loaded.")
     return train_loader, test_loader
 
-def train_one_epoch(model, loader, optimizer):
+def train_one_epoch(model, loader, optimizer, return_totals=False):
     model.train()
     total_loss = 0.0
     correct = 0
@@ -72,6 +72,9 @@ def train_one_epoch(model, loader, optimizer):
 
         count += batch_size
 
+    if return_totals: #returns loss sum, correct predictions, sample count for agggregation across workers
+        return total_loss, correct, count
+    
     average_loss = total_loss / count
     accuracy = correct / count
     return average_loss, accuracy
