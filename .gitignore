@@ -1,0 +1,22 @@
+# Python virtual environments
+.venv-ddp/
+.venv/
+venv/
+env/
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Temporary workspace files
+/tmp/
+
+# Local dataset downloads
+/data/
+
+# Operating system files
+.DS_Store
+Thumbs.db

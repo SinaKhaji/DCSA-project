@@ -1,5 +1,7 @@
 import os
+import sys
 import time
+from pathlib import Path
 import torch
 import random
 import numpy as np
@@ -8,6 +10,8 @@ import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
 from utils.utils import CNN, evaluate, save, train_one_epoch, download_dataset, get_dataloaders
 
 
@@ -17,7 +21,7 @@ LR = 0.01
 BATCH_SIZE = 128
 THREADS = 1
 SEED = 0
-OUT = "../results/"
+OUT = "./results/"
 
 os.environ["MASTER_ADDR"] = "127.0.0.1"
 os.environ["MASTER_PORT"] = "29500"
@@ -43,6 +47,7 @@ def main(process_index, REPORT):
     report = REPORT[process_index]
 
     for epoch in range(1, EPOCHS + 1):
+        sampler.set_epoch(epoch)
         epoch_start = time.time()
         train_loss, train_acc = train_one_epoch(model, train_loader, optimizer)
         epoch_time = time.time() - epoch_start
@@ -58,6 +63,7 @@ def main(process_index, REPORT):
 
     report["avg_epoch_time"] = sum(report["epoch_time"]) / EPOCHS
     REPORT[process_index] = report
+    dist.destroy_process_group()
 
 
 if __name__ == "__main__":
@@ -70,6 +76,7 @@ if __name__ == "__main__":
             "batch_size": BATCH_SIZE, "lr": LR, "epochs": EPOCHS,
             "train_loss": [], "train_acc": [], "test_loss": [], "test_acc": [],
             "epoch_time": [],
+            "sampler_set_epoch": True,
         })
     start = time.time()
     torch.multiprocessing.spawn(main, args=(REPORT,), nprocs=WORLD_SIZE) # spawned processes don't share our globals, so inject REPORT into each one
@@ -79,6 +86,31 @@ if __name__ == "__main__":
         report["total_time"] = total_time
         report["final_acc"] = report["test_acc"][-1]
         save(OUT, filename=f"DDP_{WORLD_SIZE}_{i}", report=report)
+    # All processes have finished. Combine their equal-sized training shards.
+    reports = list(REPORT)
+    report = dict(reports[0])
+    report.pop("index", None)
+    report["world_size"] = WORLD_SIZE
+    for metric in ("train_loss", "train_acc"):
+        report[metric] = []
+        for epoch in range(EPOCHS):
+            total = 0.0
+            for worker_report in reports:
+                total += worker_report[metric][epoch]
+            report[metric].append(total / WORLD_SIZE)
+
+    # Full-test metrics are identical across ranks; retain rank 0's copy.
+    # Each epoch's distributed training time is the slowest rank's time.
+    report["epoch_time"] = []
+    for epoch in range(EPOCHS):
+        longest_time = 0.0
+        for worker_report in reports:
+            longest_time = max(longest_time, worker_report["epoch_time"][epoch])
+        report["epoch_time"].append(longest_time)
+    report["avg_epoch_time"] = sum(report["epoch_time"]) / EPOCHS
+    report["final_acc"] = report["test_acc"][-1]
+    report["total_time"] = total_time
+    save(OUT, filename=f"DDP_{WORLD_SIZE}", report=report)
     mg.shutdown()
     print(f"Final test accuracy: {report['final_acc']:.3f}")
     print(f"Avg epoch time: {report['avg_epoch_time']:.1f}s")

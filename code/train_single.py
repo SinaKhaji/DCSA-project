@@ -1,7 +1,11 @@
 import time
+import sys
+from pathlib import Path
 import torch
 import random
 import numpy as np
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
 from utils.utils import CNN, evaluate, save, train_one_epoch, download_dataset, get_dataloaders
 
 
@@ -10,7 +14,7 @@ LR = 0.01
 BATCH_SIZE = 128
 THREADS = 1
 SEED = 0
-OUT = "../results/"
+OUT = "./results/"
 
 
 def main():
